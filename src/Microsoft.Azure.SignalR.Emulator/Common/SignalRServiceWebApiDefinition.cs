@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace Microsoft.Azure.SignalR.Controllers.Common
 {
+    [Authorize]
     [Route("api/v1")]
     [Route("api")]
     [Consumes("application/json")]
@@ -27,6 +28,7 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <response code="200">The service is healthy</response>
         [HttpGet("health"), HttpHead("health")]
         [ProducesResponseType(200)]
+        [AllowAnonymous]
         public abstract IActionResult GetHealthStatus();
 
         // POST /api/v1/hubs/chat
@@ -38,7 +40,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <param name="excluded">Excluded connection Ids</param>
         /// <param name="application">Target application name, which should start with alphabetic characters and only contain alpha-numeric characters or underscore.</param>
         /// <returns></returns>
-        [Authorize]
         [HttpPost("hubs/{hub}")]
         [HttpPost("hubs/{hub}/:send")]
         [ProducesResponseType(202)]
@@ -62,7 +63,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <param name="message">The message body.</param>
         /// <param name="application">Target application name, which should start with alphabetic characters and only contain alpha-numeric characters or underscore.</param>
         /// <returns></returns>
-        [Authorize]
         [HttpPost("hubs/{hub}/users/{user}")]
         [HttpPost("hubs/{hub}/users/{user}/:send")]
         [ProducesResponseType(202)]
@@ -84,7 +84,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <param name="message">The message body.</param>
         /// <param name="application">Target application name, which should start with alphabetic characters and only contain alpha-numeric characters or underscore.</param>
         /// <returns></returns>
-        [Authorize]
         [HttpPost("hubs/{hub}/connections/{connectionId}")]
         [HttpPost("hubs/{hub}/connections/{connectionId}/:send")]
         [ProducesResponseType(202)]
@@ -107,7 +106,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <param name="excluded">Excluded connection Ids</param>
         /// <param name="application">Target application name, which should start with alphabetic characters and only contain alpha-numeric characters or underscore.</param>
         /// <returns></returns>
-        [Authorize]
         [HttpPost("hubs/{hub}/groups/{group}")]
         [HttpPost("hubs/{hub}/groups/{group}/:send")]
         [ProducesResponseType(202)]
@@ -134,7 +132,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <param name="excluded">Exclude these connectionIds when closing the connections in the hub.</param>
         /// <param name="reason">The reason closing the client connections.</param>
         /// <returns></returns>
-        [Authorize]
         [ProducesResponseType(204)]
         [HttpPost("hubs/{hub}/:closeConnections")]
         public abstract Task<IActionResult> CloseConnections(
@@ -158,7 +155,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <param name="reason">The reason closing the client connections.</param>
         /// <param name="application">Target application name, which should start with alphabetic characters and only contain alpha-numeric characters or underscore.</param>
         /// <returns></returns>
-        [Authorize]
         [HttpPost("hubs/{hub}/groups/{group}/:closeConnections")]
         [ProducesResponseType(204)]
         public abstract Task<IActionResult> CloseGroupConnections(
@@ -185,7 +181,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <param name="excluded">Exclude these connectionIds when closing the connections in the hub.</param>
         /// <param name="reason">The reason closing the client connections.</param>
         /// <returns></returns>
-        [Authorize]
         [HttpPost("hubs/{hub}/users/{user}/:closeConnections")]
         [ProducesResponseType(204)]
         public abstract Task<IActionResult> CloseUserConnections(
@@ -208,7 +203,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <param name="connectionId">Target connection Id</param>
         /// <param name="application">Target application name, which should start with alphabetic characters and only contain alpha-numeric characters or underscore.</param>
         /// <returns></returns>
-        [Authorize]
         [HttpDelete("hubs/{hub}/connections/{connectionId}/groups")]
         [ProducesResponseType(200)]
         public abstract IActionResult RemoveConnectionFromAllGroups(
@@ -226,7 +220,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <param name="connectionId">The connection Id.</param>
         /// <param name="application">Target application name, which should start with alphabetic characters and only contain alpha-numeric characters or underscore.</param>
         /// <returns></returns>
-        [Authorize]
         [Route("hubs/{hub}/connections/{connectionId}")]
         [HttpGet, HttpHead]
         [ProducesResponseType(200)]
@@ -246,7 +239,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <param name="group">Target group name, which length should be greater than 0 and less than 1025.</param>
         /// <param name="application">Target application name, which should start with alphabetic characters and only contain alpha-numeric characters or underscore.</param>
         /// <returns></returns>
-        [Authorize]
         [Route("hubs/{hub}/groups/{group}")]
         [HttpGet, HttpHead]
         [ProducesResponseType(200)]
@@ -270,7 +262,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <param name="user">The user Id.</param>
         /// <param name="application">Target application name, which should start with alphabetic characters and only contain alpha-numeric characters or underscore.</param>
         /// <returns></returns>
-        [Authorize]
         [Route("hubs/{hub}/users/{user}")]
         [HttpGet, HttpHead]
         [ProducesResponseType(200)]
@@ -290,7 +281,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <param name="reason">The reason of the connection close.</param>
         /// <param name="application">Target application name, which should start with alphabetic characters and only contain alpha-numeric characters or underscore.</param>
         /// <returns></returns>
-        [Authorize]
         [HttpDelete("hubs/{hub}/connections/{connectionId}")]
         [ProducesResponseType(200)]
         public abstract Task<IActionResult> CloseClientConnection(
@@ -313,7 +303,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <param name="connectionId">Target connection Id</param>
         /// <param name="application">Target application name, which should start with alphabetic characters and only contain alpha-numeric characters or underscore.</param>
         /// <returns></returns>
-        [Authorize]
         [HttpPut("hubs/{hub}/groups/{group}/connections/{connectionId}")]
         [HttpPut("hubs/{hub}/connections/{connectionId}/groups/{group}")]
         [ProducesResponseType(200)]
@@ -337,7 +326,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <param name="connectionId">Target connection Id</param>
         /// <param name="application">Target application name, which should start with alphabetic characters and only contain alpha-numeric characters or underscore.</param>
         /// <returns></returns>
-        [Authorize]
         [HttpDelete("hubs/{hub}/groups/{group}/connections/{connectionId}")]
         [HttpDelete("hubs/{hub}/connections/{connectionId}/groups/{group}")]
         [ProducesResponseType(200)]
@@ -365,7 +353,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <param name="user">Target user Id</param>
         /// <param name="application">Target application name, which should start with alphabetic characters and only contain alpha-numeric characters or underscore.</param>
         /// <returns></returns>
-        [Authorize]
         [Route("hubs/{hub}/groups/{group}/users/{user}")]
         [Route("hubs/{hub}/users/{user}/groups/{group}")]
         [HttpGet, HttpHead]
@@ -391,7 +378,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <param name="ttl">Specifies the seconds that the user exists in the group. If not set, the user lives in the group forever.</param>
         /// <param name="application">Target application name, which should start with alphabetic characters and only contain alpha-numeric characters or underscore.</param>
         /// <returns></returns>
-        [Authorize]
         [HttpPut("hubs/{hub}/groups/{group}/users/{user}")]
         [HttpPut("hubs/{hub}/users/{user}/groups/{group}")]
         [ProducesResponseType(202)]
@@ -414,7 +400,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <param name="user">Target user Id</param>
         /// <param name="application">Target application name, which should start with alphabetic characters and only contain alpha-numeric characters or underscore.</param>
         /// <returns></returns>
-        [Authorize]
         [HttpDelete("hubs/{hub}/groups/{group}/users/{user}")]
         [HttpDelete("hubs/{hub}/users/{user}/groups/{group}")]
         [ProducesResponseType(202)]
@@ -437,7 +422,6 @@ namespace Microsoft.Azure.SignalR.Controllers.Common
         /// <returns></returns>
         /// <response code="200">The user is deleted</response>
         /// <response code="202">The delete request is accepted and service is handling the request int the background</response>
-        [Authorize]
         [HttpDelete("hubs/{hub}/users/{user}/groups")]
         [ProducesResponseType(200)]
         [ProducesResponseType(202)]
