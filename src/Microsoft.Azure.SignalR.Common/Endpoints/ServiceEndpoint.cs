@@ -70,8 +70,6 @@ public class ServiceEndpoint
 
     internal string AudienceBaseUrl { get; }
 
-    internal string? Version { get; }
-
     internal IAccessKey AccessKey
     {
         get
@@ -84,7 +82,7 @@ public class ServiceEndpoint
                 }
                 lock (_lock)
                 {
-                    _accessKey ??= new MicrosoftEntraAccessKey(_serviceEndpoint, _tokenCredential, ServerEndpoint);
+                    _accessKey ??= new MicrosoftEntraAccessKey(ServerEndpoint, _tokenCredential);
                 }
             }
             return _accessKey;
@@ -105,6 +103,13 @@ public class ServiceEndpoint
         (Name, EndpointType) = Parse(nameWithEndpointType);
     }
 
+    private static IAccessKey BuildAccessKey(ParsedConnectionString parsed)
+    {
+        return string.IsNullOrEmpty(parsed.AccessKey)
+            ? new MicrosoftEntraAccessKey(parsed.ServerEndpoint ?? parsed.Endpoint, parsed.TokenCredential)
+            : new AccessKey(parsed.AccessKey);
+    }
+
     /// <summary>
     /// Connection string constructor
     /// </summary>
@@ -118,12 +123,12 @@ public class ServiceEndpoint
             throw new ArgumentException($"'{nameof(connectionString)}' cannot be null or whitespace.", nameof(connectionString));
         }
         ConnectionString = connectionString;
-
-        var result = ConnectionStringParser.Parse(connectionString);
         EndpointType = type;
         Name = name;
 
-        _accessKey = result.AccessKey;
+        var result = ConnectionStringParser.Parse(connectionString);
+
+        _accessKey = BuildAccessKey(result);
         _serviceEndpoint = result.Endpoint;
         _clientEndpoint = result.ClientEndpoint;
         _serverEndpoint = result.ServerEndpoint;
@@ -182,7 +187,6 @@ public class ServiceEndpoint
         ConnectionString = other.ConnectionString;
         EndpointType = other.EndpointType;
         Name = other.Name;
-        Version = other.Version;
         Endpoint = other.Endpoint;
         AudienceBaseUrl = other.AudienceBaseUrl;
 

@@ -116,7 +116,6 @@ public class ServiceEndpointFacts
         Assert.Equal(serviceEndpoint.Name, cloned.Name);
         Assert.Equal(serviceEndpoint.ConnectionString, cloned.ConnectionString);
         Assert.Equal(serviceEndpoint.AudienceBaseUrl, cloned.AudienceBaseUrl);
-        Assert.Equal(serviceEndpoint.Version, cloned.Version);
         Assert.Equal(serviceEndpoint.AccessKey, cloned.AccessKey);
     }
 
@@ -131,13 +130,15 @@ public class ServiceEndpointFacts
     public void TestAzureCredentialConstructor(string url, string expectedEndpoint, int port)
     {
         var uri = new Uri(url);
-        var serviceEndpoint = new ServiceEndpoint(uri, new DefaultAzureCredential());
-        Assert.IsType<MicrosoftEntraAccessKey>(serviceEndpoint.AccessKey);
-        Assert.Equal(expectedEndpoint, serviceEndpoint.Endpoint);
-        Assert.Equal("", serviceEndpoint.Name);
-        Assert.Equal(port, serviceEndpoint.AccessKey.Endpoint.Port);
-        Assert.Equal(EndpointType.Primary, serviceEndpoint.EndpointType);
-        TestCopyConstructor(serviceEndpoint);
+        var endpoint = new ServiceEndpoint(uri, new DefaultAzureCredential());
+        Assert.Equal(port, endpoint.ClientEndpoint.Port);
+        Assert.Equal(port, endpoint.ServerEndpoint.Port);
+
+        Assert.IsType<MicrosoftEntraAccessKey>(endpoint.AccessKey);
+        Assert.Equal(expectedEndpoint, endpoint.Endpoint);
+        Assert.Equal("", endpoint.Name);
+        Assert.Equal(EndpointType.Primary, endpoint.EndpointType);
+        TestCopyConstructor(endpoint);
     }
 
     [Theory]
@@ -285,7 +286,6 @@ public class ServiceEndpointFacts
         Assert.Equal(endpoint.EndpointType, other.EndpointType);
         Assert.Equal(endpoint.Endpoint, other.Endpoint);
         Assert.Equal(endpoint.ClientEndpoint, other.ClientEndpoint);
-        Assert.Equal(endpoint.Version, other.Version);
         Assert.Equal(endpoint.AccessKey, other.AccessKey);
     }
 
