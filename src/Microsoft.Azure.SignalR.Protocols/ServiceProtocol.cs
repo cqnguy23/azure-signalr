@@ -6,9 +6,10 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Security.Claims;
 using MessagePack;
 using Microsoft.Extensions.Primitives;
+
+using static Microsoft.Azure.SignalR.Protocol.MessagePackUtils;
 
 namespace Microsoft.Azure.SignalR.Protocol;
 
@@ -17,14 +18,37 @@ namespace Microsoft.Azure.SignalR.Protocol;
 /// </summary>
 public class ServiceProtocol : IServiceProtocol
 {
-    private static readonly IDictionary<string, ReadOnlyMemory<byte>> EmptyReadOnlyMemoryDictionary = new Dictionary<string, ReadOnlyMemory<byte>>();
-
-    private static readonly IDictionary<string, StringValues> EmptyStringValuesDictionaryIgnoreCase = new Dictionary<string, StringValues>(StringComparer.OrdinalIgnoreCase);
-
-    private static readonly int ProtocolVersion = 1;
-
     /// <inheritdoc />
     public int Version => ProtocolVersion;
+
+    public T ParseMessagePayload<T>(ReadOnlySequence<byte> input) where T : notnull, new()
+    {
+        if (typeof(IMessagePackSerializable).IsAssignableFrom(typeof(T)))
+        {
+            var model = new T();
+            var reader = new MessagePackReader(input);
+            ((IMessagePackSerializable)model).Load(ref reader, typeof(T).Name);
+            return model;
+        }
+        else
+        {
+            throw new NotSupportedException($"Type {typeof(T).Name} is not supported.");
+        }
+    }
+
+    public void WriteMessagePayload<T>(T model, IBufferWriter<byte> output) where T : notnull, new()
+    {
+        if (typeof(IMessagePackSerializable).IsAssignableFrom(typeof(T)))
+        {
+            var writer = new MessagePackWriter(output);
+            ((IMessagePackSerializable)model).Serialize(ref writer);
+            writer.Flush();
+        }
+        else
+        {
+            throw new NotSupportedException($"Type {typeof(T).Name} is not supported.");
+        }
+    }
 
     /// <inheritdoc />
     public bool TryParseMessage(ref ReadOnlySequence<byte> input, out ServiceMessage? message)
@@ -129,6 +153,8 @@ public class ServiceProtocol : IServiceProtocol
                 return CreateServiceMappingMessage(ref reader, arrayLength);
             case ServiceProtocolConstants.ConnectionFlowControlMessageType:
                 return CreateConnectionFlowControlMessage(ref reader, arrayLength);
+            case ServiceProtocolConstants.GroupMemberQueryMessageType:
+                return CreateGroupMemberQueryMessage(ref reader, arrayLength);
             default:
                 // Future protocol changes can add message types, old clients can ignore them
                 return null;
@@ -311,6 +337,9 @@ public class ServiceProtocol : IServiceProtocol
                 break;
             case ConnectionFlowControlMessage connectionFlowControlMessage:
                 WriteConnectionFlowControlMessage(ref writer, connectionFlowControlMessage);
+                break;
+            case GroupMemberQueryMessage groupMemberQueryMessage:
+                WriteGroupMemberQueryMessage(ref writer, groupMemberQueryMessage);
                 break;
             default:
                 throw new InvalidDataException($"Unexpected message type: {message.GetType().Name}");
@@ -657,12 +686,20 @@ public class ServiceProtocol : IServiceProtocol
 
     private static void WriteAckMessage(ref MessagePackWriter writer, AckMessage message)
     {
-        writer.WriteArrayHeader(5);
+        writer.WriteArrayHeader(6);
         writer.Write(ServiceProtocolConstants.AckMessageType);
         writer.Write(message.AckId);
         writer.Write(message.Status);
         writer.Write(message.Message);
         message.WriteExtensionMembers(ref writer);
+        if (message.Payload.HasValue)
+        {
+            writer.Write(message.Payload.Value);
+        }
+        else
+        {
+            writer.WriteNil();
+        }
     }
 
     private static void WriteClientInvocationMessage(ref MessagePackWriter writer, ClientInvocationMessage message)
@@ -698,7 +735,7 @@ public class ServiceProtocol : IServiceProtocol
         writer.Write(message.Error);
         message.WriteExtensionMembers(ref writer);
     }
-    
+
     private static void WriteServiceMappingMessage(ref MessagePackWriter writer, ServiceMappingMessage message)
     {
         writer.WriteArrayHeader(5);
@@ -717,6 +754,17 @@ public class ServiceProtocol : IServiceProtocol
         writer.WriteInt32((int)message.ConnectionType);
         writer.WriteInt32((int)message.Operation);
         message.WriteExtensionMembers(ref writer);
+    }
+
+    private static void WriteGroupMemberQueryMessage(ref MessagePackWriter writer, GroupMemberQueryMessage message)
+    {
+        writer.WriteArrayHeader(6);
+        writer.Write(ServiceProtocolConstants.GroupMemberQueryMessageType);
+        message.WriteExtensionMembers(ref writer);
+        writer.Write(message.GroupName);
+        writer.Write(message.AckId);
+        writer.Write(message.Max);
+        writer.Write(message.ContinuationToken);
     }
 
     private static void WriteStringArray(ref MessagePackWriter writer, IReadOnlyList<string>? array)
@@ -1234,7 +1282,6 @@ public class ServiceProtocol : IServiceProtocol
     {
         var userId = ReadStringNotNull(ref reader, "userId");
         var ackId = ReadInt32(ref reader, "ackId");
-
         var result = new CheckUserExistenceWithAckMessage(userId, ackId);
         result.ReadExtensionMembers(ref reader);
         return result;
@@ -1245,11 +1292,14 @@ public class ServiceProtocol : IServiceProtocol
         var ackId = ReadInt32(ref reader, "ackId");
         var status = ReadInt32(ref reader, "status");
         var message = ReadString(ref reader, "message");
-
         var result = new AckMessage(ackId, status, message);
         if (arrayLength >= 5)
         {
             result.ReadExtensionMembers(ref reader);
+        }
+        if (arrayLength >= 6)
+        {
+            result.Payload = ReadByteSequence(ref reader, "payload");
         }
         return result;
     }
@@ -1338,206 +1388,14 @@ public class ServiceProtocol : IServiceProtocol
         return result;
     }
 
-    private static Claim[] ReadClaims(ref MessagePackReader reader)
+    private static GroupMemberQueryMessage CreateGroupMemberQueryMessage(ref MessagePackReader reader, int arrayLength)
     {
-        var claimCount = ReadMapLength(ref reader, "claims");
-        if (claimCount > 0)
-        {
-            var claims = new Claim[claimCount];
-
-            for (var i = 0; i < claimCount; i++)
-            {
-                var type = ReadString(ref reader, "claims[{0}].Type", i);
-                var value = ReadString(ref reader, "claims[{0}].Value", i);
-                claims[i] = new Claim(type, value);
-            }
-
-            return claims;
-        }
-
-        return [];
-    }
-
-    private static IDictionary<string, ReadOnlyMemory<byte>> ReadPayloads(ref MessagePackReader reader)
-    {
-        var payloadCount = ReadMapLength(ref reader, "payloads");
-        if (payloadCount > 0)
-        {
-            var payloads = new ArrayDictionary<string, ReadOnlyMemory<byte>>((int)payloadCount, StringComparer.OrdinalIgnoreCase);
-            for (var i = 0; i < payloadCount; i++)
-            {
-                var keyName = $"payloads[{i}].key";
-
-                var key = ReadStringNotNull(ref reader, keyName);
-                var value = ReadBytes(ref reader, "payloads[{0}].value", i);
-                payloads.Add(key, value);
-            }
-
-            return payloads;
-        }
-
-        return EmptyReadOnlyMemoryDictionary;
-    }
-
-    private static IDictionary<string, StringValues> ReadHeaders(ref MessagePackReader reader)
-    {
-        var headerCount = ReadMapLength(ref reader, "headers");
-        if (headerCount > 0)
-        {
-            var headers = new Dictionary<string, StringValues>((int)headerCount, StringComparer.OrdinalIgnoreCase);
-            for (var i = 0; i < headerCount; i++)
-            {
-                var keyName = $"headers[{i}].key";
-                var key = ReadStringNotNull(ref reader, keyName);
-                var count = ReadArrayLength(ref reader, $"headers[{i}].value.length");
-                var stringValues = new string?[count];
-                for (var j = 0; j < count; j++)
-                {
-                    stringValues[j] = ReadString(ref reader, $"headers[{i}].value[{j}]");
-                }
-                headers.Add(key, stringValues);
-            }
-
-            return headers;
-        }
-
-        return EmptyStringValuesDictionaryIgnoreCase;
-    }
-
-    private static bool ReadBoolean(ref MessagePackReader reader, string field)
-    {
-        try
-        {
-            return reader.ReadBoolean();
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidDataException($"Reading '{field}' as Boolean failed.", ex);
-
-        }
-    }
-
-    private static int ReadInt32(ref MessagePackReader reader, string field)
-    {
-        try
-        {
-            return reader.ReadInt32();
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidDataException($"Reading '{field}' as Int32 failed.", ex);
-        }
-    }
-
-    private static string? ReadString(ref MessagePackReader reader, string field)
-    {
-        try
-        {
-            return reader.ReadString();
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidDataException($"Reading '{field}' as String failed.", ex);
-        }
-    }
-
-    private static string ReadStringNotNull(ref MessagePackReader reader, string field)
-    {
-        string? result = null;  
-        try
-        {
-            result = reader.ReadString();
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidDataException($"Reading '{field}' as String failed.", ex);
-
-        }
-
-        if (result == null)
-        {
-            throw new InvalidDataException($"Reading '{field}' as Not-Null String failed.");
-        }
-
+        var result = new GroupMemberQueryMessage();
+        result.ReadExtensionMembers(ref reader);
+        result.GroupName = ReadStringNotNull(ref reader, nameof(GroupMemberQueryMessage.GroupName));
+        result.AckId = ReadInt32(ref reader, nameof(GroupMemberQueryMessage.AckId));
+        result.Max = ReadInt32(ref reader, nameof(GroupMemberQueryMessage.Max));
+        result.ContinuationToken = ReadString(ref reader, nameof(GroupMemberQueryMessage.ContinuationToken));
         return result;
-    }
-
-    private static string? ReadString(ref MessagePackReader reader, string formatField, int param)
-    {
-        try
-        {
-            return reader.ReadString();
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidDataException($"Reading '{string.Format(formatField, param)}' as String failed.", ex);
-        }
-    }
-
-    private static string[] ReadStringArray(ref MessagePackReader reader, string field)
-    {
-        var arrayLength = ReadArrayLength(ref reader, field);
-        if (arrayLength > 0)
-        {
-            var array = new string[arrayLength];
-            for (int i = 0; i < arrayLength; i++)
-            {
-                var fieldName = $"{field}[{i}]";
-                array[i] = ReadStringNotNull(ref reader, fieldName);
-            }
-
-            return array;
-        }
-
-        return [];
-    }
-
-    private static byte[] ReadBytes(ref MessagePackReader reader, string field)
-    {
-        try
-        {
-            return reader.ReadBytes()?.ToArray() ?? Array.Empty<byte>();
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidDataException($"Reading '{field}' as Byte[] failed.", ex);
-        }
-    }
-
-    private static byte[] ReadBytes(ref MessagePackReader reader, string formatField, int param)
-    {
-        try
-        {
-            return reader.ReadBytes()?.ToArray() ?? Array.Empty<byte>();
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidDataException($"Reading '{string.Format(formatField, param)}' as Byte[] failed.", ex);
-        }
-    }
-
-    private static long ReadMapLength(ref MessagePackReader reader, string field)
-    {
-        try
-        {
-            return reader.ReadMapHeader();
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidDataException($"Reading map length for '{field}' failed.", ex);
-        }
-    }
-
-    private static long ReadArrayLength(ref MessagePackReader reader, string field)
-    {
-        try
-        {
-            return reader.ReadArrayHeader();
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidDataException($"Reading array length for '{field}' failed.", ex);
-        }
-
     }
 }
